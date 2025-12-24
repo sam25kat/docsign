@@ -1,0 +1,134 @@
+.pdf-viewer-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #f5f5f5;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.pdf-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  background: white;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.toolbar-section {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.toolbar-section button {
+  padding: 0.5rem 1rem;
+  background: #f0f0f0;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all 0.2s;
+}
+
+.toolbar-section button:hover:not(:disabled) {
+  background: #e0e0e0;
+}
+
+.toolbar-section button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.page-info,
+.zoom-info {
+  font-size: 0.9rem;
+  color: #666;
+  min-width: 100px;
+  text-align: center;
+}
+
+.btn-place-signature {
+  background: #1a73e8 !important;
+  color: white !important;
+  border-color: #1a73e8 !important;
+}
+
+.btn-place-signature:hover {
+  background: #1557b0 !important;
+}
+
+.btn-place-signature.active {
+  background: #0d47a1 !important;
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+.pdf-container {
+  flex: 1;
+  overflow: auto;
+  padding: 1rem;
+  display: flex;
+  justify-content: center;
+}
+
+.pdf-container.placing-mode {
+  cursor: crosshair;
+}
+
+.pdf-page-wrapper {
+  position: relative;
+  display: inline-block;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.signature-preview-overlay {
+  position: absolute;
+  border: 2px dashed #1a73e8;
+  background: rgba(26, 115, 232, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.signature-preview-overlay img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.signature-preview-overlay span {
+  color: #1a73e8;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.placement-hint {
+  padding: 0.75rem;
+  background: #fff3cd;
+  color: #856404;
+  text-align: center;
+  font-size: 0.9rem;
+  border-top: 1px solid #ffc107;
+}
+
+/* React-PDF styles */
+.react-pdf__Document {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.react-pdf__Page {
+  background: white;
+}
+
+.react-pdf__Page canvas {
+  display: block;
+}

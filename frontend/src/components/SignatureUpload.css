@@ -1,0 +1,200 @@
+/* ============================================
+   SIGNATURE UPLOAD COMPONENT - GLASSMORPHISM
+   ============================================ */
+
+.signature-upload {
+  max-width: 100%;
+}
+
+.signature-upload h3 {
+  margin-bottom: 0.5rem;
+  color: var(--text-primary);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.upload-info {
+  color: var(--text-tertiary);
+  margin-bottom: 1.5rem;
+  font-size: 0.9rem;
+}
+
+.current-signature {
+  margin-bottom: 1.5rem;
+  padding: 1.5rem;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--border-radius-sm);
+  text-align: center;
+}
+
+.current-signature h4 {
+  margin-bottom: 0.75rem;
+  color: var(--text-tertiary);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.current-signature img {
+  max-width: 200px;
+  max-height: 80px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--border-radius-sm);
+  background: rgba(255, 255, 255, 0.02);
+  padding: 0.75rem;
+}
+
+.signature-upload .drop-zone {
+  border: 2px dashed var(--glass-border);
+  border-radius: var(--border-radius);
+  padding: 2.5rem 2rem;
+  text-align: center;
+  cursor: pointer;
+  transition: var(--transition);
+  background: rgba(255, 255, 255, 0.01);
+}
+
+.signature-upload .drop-zone:hover,
+.signature-upload .drop-zone.active {
+  border-color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.signature-upload .drop-zone.has-preview {
+  padding: 1.5rem;
+  border-style: solid;
+  border-color: var(--success);
+  background: var(--success-bg);
+}
+
+.signature-upload .drop-content {
+  color: var(--text-secondary);
+}
+
+.signature-upload .drop-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+  opacity: 0.5;
+}
+
+.signature-upload .drop-hint {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.supported-formats {
+  font-size: 0.8rem;
+  color: var(--text-tertiary);
+  margin-top: 0.75rem;
+}
+
+.preview-container {
+  text-align: center;
+}
+
+.preview-container img {
+  max-width: 100%;
+  max-height: 150px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--border-radius-sm);
+  background: rgba(255, 255, 255, 0.02);
+  margin-bottom: 0.75rem;
+  padding: 0.5rem;
+}
+
+.preview-container p {
+  color: var(--text-tertiary);
+  font-size: 0.85rem;
+}
+
+.upload-error {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: var(--error-bg);
+  border: 1px solid rgba(248, 113, 113, 0.2);
+  color: var(--error);
+  border-radius: var(--border-radius-sm);
+  font-size: 0.9rem;
+}
+
+.upload-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  margin-top: 1.5rem;
+}
+
+.signature-upload .btn-clear,
+.signature-upload .btn-upload {
+  padding: 0.75rem 2rem;
+  border-radius: var(--border-radius-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.signature-upload .btn-clear {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  color: var(--text-secondary);
+}
+
+.signature-upload .btn-clear:hover {
+  background: var(--glass-bg-hover);
+  color: var(--text-primary);
+}
+
+.signature-upload .btn-upload {
+  background: var(--text-primary);
+  border: none;
+  color: var(--bg-primary);
+}
+
+.signature-upload .btn-upload:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 20px rgba(255, 255, 255, 0.2);
+}
+
+.signature-upload .btn-upload:disabled,
+.signature-upload .btn-clear:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.upload-tips {
+  margin-top: 2rem;
+  padding: 1.5rem;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--border-radius-sm);
+}
+
+.upload-tips h4 {
+  color: var(--text-primary);
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.upload-tips ul {
+  margin: 0;
+  padding-left: 0;
+  list-style: none;
+  color: var(--text-secondary);
+}
+
+.upload-tips li {
+  margin: 0.5rem 0;
+  padding-left: 1.25rem;
+  position: relative;
+  font-size: 0.9rem;
+}
+
+.upload-tips li::before {
+  content: '•';
+  position: absolute;
+  left: 0;
+  color: var(--text-tertiary);
+}

@@ -1,0 +1,194 @@
+/* ============================================
+   SIGNATURE PAGE - GLASSMORPHISM
+   ============================================ */
+
+.signature-page {
+  padding: 2rem;
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+.signature-container h1 {
+  margin: 0 0 0.5rem 0;
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.5px;
+}
+
+.page-subtitle {
+  color: var(--text-secondary);
+  margin-bottom: 2.5rem;
+  font-size: 1rem;
+}
+
+.loading {
+  text-align: center;
+  padding: 4rem;
+  color: var(--text-secondary);
+}
+
+.current-signature-section {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+  margin-bottom: 2rem;
+}
+
+.signature-card {
+  background: var(--glass-bg);
+  backdrop-filter: var(--blur);
+  padding: 2rem;
+  border-radius: var(--border-radius);
+  border: 1px solid var(--glass-border);
+}
+
+.signature-card h3 {
+  margin: 0 0 1.5rem 0;
+  color: var(--text-primary);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.signature-display {
+  padding: 2rem;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: var(--border-radius-sm);
+  text-align: center;
+  margin-bottom: 1.5rem;
+  border: 1px dashed var(--glass-border);
+}
+
+.signature-display img {
+  max-width: 100%;
+  max-height: 100px;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+}
+
+.signature-info {
+  color: var(--text-tertiary);
+  font-size: 0.85rem;
+  margin-bottom: 1.5rem;
+}
+
+.signature-actions {
+  display: flex;
+  gap: 1rem;
+}
+
+.btn-delete {
+  padding: 0.75rem 1.5rem;
+  background: var(--error-bg);
+  border: 1px solid rgba(248, 113, 113, 0.3);
+  color: var(--error);
+  border-radius: var(--border-radius-sm);
+  cursor: pointer;
+  font-weight: 500;
+  transition: var(--transition);
+}
+
+.btn-delete:hover:not(:disabled) {
+  background: rgba(248, 113, 113, 0.2);
+}
+
+.btn-delete:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.update-section {
+  background: var(--glass-bg);
+  backdrop-filter: var(--blur);
+  padding: 2rem;
+  border-radius: var(--border-radius);
+  border: 1px solid var(--glass-border);
+}
+
+.update-section h3 {
+  margin: 0 0 0.5rem 0;
+  color: var(--text-primary);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.update-section > p {
+  color: var(--text-tertiary);
+  margin-bottom: 1.5rem;
+  font-size: 0.9rem;
+}
+
+.no-signature-section {
+  background: var(--glass-bg);
+  backdrop-filter: var(--blur);
+  padding: 2rem;
+  border-radius: var(--border-radius);
+  border: 1px solid var(--glass-border);
+  margin-bottom: 2rem;
+}
+
+.no-signature-message {
+  text-align: center;
+  padding: 2rem;
+  margin-bottom: 2rem;
+}
+
+.no-signature-message .icon {
+  font-size: 4rem;
+  margin-bottom: 1.5rem;
+  opacity: 0.5;
+}
+
+.no-signature-message h3 {
+  margin: 0 0 0.5rem 0;
+  color: var(--text-primary);
+  font-size: 1.25rem;
+}
+
+.no-signature-message p {
+  color: var(--text-tertiary);
+}
+
+.security-info {
+  background: var(--glass-bg);
+  backdrop-filter: var(--blur);
+  padding: 2rem;
+  border-radius: var(--border-radius);
+  border: 1px solid var(--glass-border);
+}
+
+.security-info h3 {
+  margin: 0 0 1.5rem 0;
+  color: var(--text-primary);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.security-info ul {
+  margin: 0;
+  padding-left: 0;
+  list-style: none;
+  color: var(--text-secondary);
+}
+
+.security-info li {
+  margin: 0.75rem 0;
+  padding-left: 1.5rem;
+  position: relative;
+}
+
+.security-info li::before {
+  content: '✓';
+  position: absolute;
+  left: 0;
+  color: var(--success);
+}
+
+.security-info strong {
+  color: var(--text-primary);
+}
+
+@media (max-width: 768px) {
+  .current-signature-section {
+    grid-template-columns: 1fr;
+  }
+}
