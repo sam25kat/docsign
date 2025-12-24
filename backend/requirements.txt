@@ -14,7 +14,8 @@ Pillow==10.1.0
 # Background Removal (Optional - comment out if installation fails)
 # rembg requires additional dependencies and ~1GB download on first run
 # If not installed, falls back to simple threshold-based removal
-rembg==2.0.50
+rembg>=2.0.55
+onnxruntime
 
 # Encryption
 cryptography==41.0.7
