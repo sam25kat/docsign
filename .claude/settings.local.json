@@ -7,7 +7,14 @@
       "Bash(\"venv/Scripts/pip.exe\" install -r requirements.txt)",
       "Bash(npm install)",
       "Bash(tasklist /FI \"WINDOWTITLE eq *Claude*\")",
-      "Bash(git init:*)"
+      "Bash(git init:*)",
+      "Bash(venv/Scripts/pip.exe install:*)",
+      "Bash(python -c:*)",
+      "Bash(\"venv\\\\Scripts\\\\python.exe\" -c \"from signature_detector import detect_signature_position; print\\(''Signature detector module OK''\\)\")",
+      "Bash(\"venv\\\\Scripts\\\\python.exe\" -c \"from app import app; print\\(''App imports OK''\\)\")",
+      "Bash(npm run build:*)",
+      "Bash(dir \"c:\\\\Users\\\\JARVIS\\\\Desktop\\\\Document Signer\\\\signed_documents\")",
+      "Bash(\"venv\\\\Scripts\\\\python.exe\" -c \"import base64, os; print\\(base64.b64encode\\(os.urandom\\(32\\)\\).decode\\(\\)\\)\")"
     ]
   }
 }

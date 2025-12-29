@@ -19,6 +19,7 @@ from models import db, User, Signature, Document
 from encryption import init_encryption, get_encryption, SignatureEncryption
 from signature_processor import process_signature_image, validate_image, get_signature_preview
 from pdf_signer import add_signature_to_pdf, get_pdf_info
+from signature_detector import detect_signature_position, detect_signature_positions_batch
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -38,10 +39,16 @@ def load_user(user_id):
 
 # Initialize encryption
 def init_app_encryption():
+    import base64
     key = app.config.get('ENCRYPTION_KEY')
     if key:
         if isinstance(key, str):
-            key = key.encode()
+            # Decode base64 key to get 32 raw bytes
+            try:
+                key = base64.b64decode(key)
+            except Exception:
+                # If not valid base64, use as passphrase
+                key = key.encode()
     else:
         # Generate a key if not provided (save this in production!)
         key = os.urandom(32)
@@ -182,22 +189,29 @@ def upload_signature():
         import hashlib
         file_hash = hashlib.sha256(processed_signature).hexdigest()
 
-        # Delete old signature if exists
-        old_signature = Signature.query.filter_by(user_id=current_user.id).first()
-        if old_signature:
-            # Delete old encrypted file
-            if os.path.exists(old_signature.encrypted_path):
-                os.remove(old_signature.encrypted_path)
-            db.session.delete(old_signature)
+        # Check for existing signature and update or create
+        existing_signature = Signature.query.filter_by(user_id=current_user.id).first()
 
-        # Save to database
-        signature = Signature(
-            user_id=current_user.id,
-            encrypted_path=encrypted_path,
-            original_filename=secure_filename(file.filename),
-            file_hash=file_hash
-        )
-        db.session.add(signature)
+        if existing_signature:
+            # Delete old encrypted file
+            if os.path.exists(existing_signature.encrypted_path):
+                os.remove(existing_signature.encrypted_path)
+            # Update existing record
+            existing_signature.encrypted_path = encrypted_path
+            existing_signature.original_filename = secure_filename(file.filename)
+            existing_signature.file_hash = file_hash
+            existing_signature.updated_at = datetime.utcnow()
+            signature = existing_signature
+        else:
+            # Create new signature record
+            signature = Signature(
+                user_id=current_user.id,
+                encrypted_path=encrypted_path,
+                original_filename=secure_filename(file.filename),
+                file_hash=file_hash
+            )
+            db.session.add(signature)
+
         db.session.commit()
 
         return jsonify({
@@ -411,6 +425,8 @@ def sign_document(doc_id):
 
     except Exception as e:
         db.session.rollback()
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': f'Failed to sign document: {str(e)}'}), 500
 
 
@@ -452,6 +468,182 @@ def delete_document(doc_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': f'Failed to delete document: {str(e)}'}), 500
+
+
+# ============== AUTO-DETECT & BULK SIGN ROUTES ==============
+
+@app.route('/api/documents/<int:doc_id>/detect-signature-position', methods=['GET'])
+@login_required
+def detect_document_signature_position(doc_id):
+    """Detect where signature should be placed in a document."""
+    document = Document.query.get_or_404(doc_id)
+
+    try:
+        detection = detect_signature_position(document.original_path)
+        return jsonify(detection), 200
+    except Exception as e:
+        return jsonify({'error': f'Detection failed: {str(e)}'}), 500
+
+
+@app.route('/api/documents/bulk-detect', methods=['POST'])
+@login_required
+def bulk_detect_signature_positions():
+    """Detect signature positions for multiple documents."""
+    data = request.json
+    document_ids = data.get('document_ids', [])
+
+    if not document_ids:
+        return jsonify({'error': 'No document IDs provided'}), 400
+
+    results = []
+    for doc_id in document_ids:
+        document = Document.query.get(doc_id)
+        if document and document.status == 'pending':
+            detection = detect_signature_position(document.original_path)
+            detection['document_id'] = doc_id
+            detection['filename'] = document.filename
+            detection['patient_name'] = document.patient_name
+            results.append(detection)
+
+    return jsonify({'detections': results}), 200
+
+
+@app.route('/api/documents/bulk-sign', methods=['POST'])
+@login_required
+def bulk_sign_documents():
+    """
+    Sign multiple documents at once.
+
+    Request body:
+    {
+        "documents": [
+            {"id": 1, "position": {x, y, page, width, height}},
+            {"id": 2, "position": {x, y, page, width, height}},
+            ...
+        ],
+        "auto_mode": false  // If true, auto-detect positions for docs without position
+    }
+    """
+    data = request.json
+    documents_to_sign = data.get('documents', [])
+    auto_mode = data.get('auto_mode', False)
+
+    if not documents_to_sign:
+        return jsonify({'error': 'No documents provided'}), 400
+
+    # Get user's signature
+    signature = Signature.query.filter_by(user_id=current_user.id).first()
+    if not signature:
+        return jsonify({'error': 'No signature found. Please upload your signature first.'}), 400
+
+    # Decrypt signature once for all documents
+    try:
+        encryption = get_encryption()
+        signature_data = encryption.decrypt_file(signature.encrypted_path)
+
+        # Verify integrity
+        import hashlib
+        if hashlib.sha256(signature_data).hexdigest() != signature.file_hash:
+            return jsonify({'error': 'Signature integrity check failed'}), 500
+    except Exception as e:
+        return jsonify({'error': f'Failed to load signature: {str(e)}'}), 500
+
+    results = {
+        'successful': [],
+        'failed': []
+    }
+
+    for doc_info in documents_to_sign:
+        doc_id = doc_info.get('id')
+        position = doc_info.get('position')
+
+        document = Document.query.get(doc_id)
+        if not document:
+            results['failed'].append({
+                'id': doc_id,
+                'error': 'Document not found'
+            })
+            continue
+
+        if document.status == 'signed':
+            results['failed'].append({
+                'id': doc_id,
+                'filename': document.filename,
+                'error': 'Already signed'
+            })
+            continue
+
+        # Auto-detect position if not provided and auto_mode is on
+        if not position and auto_mode:
+            detection = detect_signature_position(document.original_path)
+            if detection['found']:
+                position = {
+                    'x': detection['x'],
+                    'y': detection['y'],
+                    'page': detection['page'],
+                    'width': detection['width'],
+                    'height': detection['height']
+                }
+            else:
+                results['failed'].append({
+                    'id': doc_id,
+                    'filename': document.filename,
+                    'error': 'Could not detect signature position'
+                })
+                continue
+
+        if not position:
+            results['failed'].append({
+                'id': doc_id,
+                'filename': document.filename,
+                'error': 'No position provided'
+            })
+            continue
+
+        try:
+            # Generate signed PDF filename
+            signed_filename = f"signed_{document.filename}"
+            signed_path = os.path.join(app.config['SIGNED_FOLDER'], signed_filename)
+
+            # Add signature to PDF
+            add_signature_to_pdf(
+                pdf_path=document.original_path,
+                signature_data=signature_data,
+                position=position,
+                output_path=signed_path
+            )
+
+            # Update document record
+            document.signed_path = signed_path
+            document.signed_by = current_user.id
+            document.signed_at = datetime.utcnow()
+            document.signature_position = position
+            document.status = 'signed'
+
+            results['successful'].append({
+                'id': doc_id,
+                'filename': document.filename,
+                'position': position
+            })
+
+        except Exception as e:
+            results['failed'].append({
+                'id': doc_id,
+                'filename': document.filename,
+                'error': str(e)
+            })
+
+    # Commit all changes
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Database error: {str(e)}'}), 500
+
+    return jsonify({
+        'message': f'Signed {len(results["successful"])} of {len(documents_to_sign)} documents',
+        'results': results
+    }), 200
 
 
 # ============== UTILITY ROUTES ==============

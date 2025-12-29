@@ -40,6 +40,14 @@ export const documentAPI = {
   download: (id) => `${API_URL}/documents/${id}/download`,
   downloadBlob: (id) => api.get(`/documents/${id}/download`, { responseType: 'blob' }),
   delete: (id) => api.delete(`/documents/${id}/delete`),
+
+  // Auto-detect and bulk signing
+  detectSignaturePosition: (id) => api.get(`/documents/${id}/detect-signature-position`),
+  bulkDetect: (documentIds) => api.post('/documents/bulk-detect', { document_ids: documentIds }),
+  bulkSign: (documents, autoMode = false) => api.post('/documents/bulk-sign', {
+    documents,
+    auto_mode: autoMode,
+  }),
 };
 
 export default api;

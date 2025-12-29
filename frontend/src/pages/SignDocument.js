@@ -21,6 +21,8 @@ const SignDocument = () => {
   const [loading, setLoading] = useState(true);
   const [signing, setSigning] = useState(false);
   const [error, setError] = useState('');
+  const [detecting, setDetecting] = useState(false);
+  const [detectionInfo, setDetectionInfo] = useState(null);
 
   // Signature position state
   const [signaturePosition, setSignaturePosition] = useState(null);
@@ -159,6 +161,45 @@ const SignDocument = () => {
   // Clear signature position
   const handleClearPosition = () => {
     setSignaturePosition(null);
+    setDetectionInfo(null);
+  };
+
+  // Auto-detect signature position
+  const handleAutoDetect = async () => {
+    setDetecting(true);
+    setDetectionInfo(null);
+
+    try {
+      const response = await documentAPI.detectSignaturePosition(id);
+      const detection = response.data;
+
+      if (detection.found) {
+        // Navigate to the detected page
+        setCurrentPage(detection.page + 1);
+
+        // Set signature position
+        setSignaturePosition({
+          x: detection.x,
+          y: detection.y,
+          page: detection.page,
+          width: detection.width,
+          height: detection.height,
+        });
+
+        setDetectionInfo({
+          confidence: detection.confidence,
+          method: detection.method,
+          keyword: detection.keyword,
+        });
+      } else {
+        alert('Could not detect signature position. Please place manually.');
+      }
+    } catch (err) {
+      console.error('Detection failed:', err);
+      alert('Auto-detection failed. Please place signature manually.');
+    } finally {
+      setDetecting(false);
+    }
   };
 
   // Sign document
@@ -271,9 +312,26 @@ const SignDocument = () => {
         <div className="pdf-viewer-area">
           <div className="instructions">
             {!signaturePosition ? (
-              <p>Click anywhere on the document to place your signature</p>
+              <div className="instructions-content">
+                <p>Click anywhere on the document to place your signature, or use auto-detect</p>
+                <button
+                  className="btn-auto-detect"
+                  onClick={handleAutoDetect}
+                  disabled={detecting || !signaturePreview}
+                >
+                  {detecting ? 'Detecting...' : 'Auto-Detect Position'}
+                </button>
+              </div>
             ) : (
-              <p>Drag to move • Use slider to resize • Click "Sign & Save" when ready</p>
+              <div className="instructions-content">
+                <p>Drag to move • Use slider to resize • Click "Sign & Save" when ready</p>
+                {detectionInfo && (
+                  <span className={`detection-badge ${detectionInfo.confidence}`}>
+                    {detectionInfo.confidence} confidence
+                    {detectionInfo.keyword && ` • Found: "${detectionInfo.keyword}"`}
+                  </span>
+                )}
+              </div>
             )}
           </div>
 

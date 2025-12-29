@@ -96,6 +96,10 @@ def add_signature_to_pdf(
     y_from_top = float(position.get('y', 100))
     y = page_height - y_from_top - sig_height
 
+    # Ensure coordinates are within valid bounds
+    x = max(0, min(x, page_width - sig_width))
+    y = max(0, min(y, page_height - sig_height))
+
     # Create overlay PDF with signature
     packet = io.BytesIO()
     overlay_canvas = canvas.Canvas(packet, pagesize=(page_width, page_height))
