@@ -27,9 +27,8 @@ env/
 .venv/
 
 # Environment variables
-.env
 
-.env.*.local
+
 
 # Database
 *.db
