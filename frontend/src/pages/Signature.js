@@ -6,6 +6,7 @@ import './Signature.css';
 
 const Signature = () => {
   const [signaturePreview, setSignaturePreview] = useState(null);
+  const [signerName, setSignerName] = useState('');
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
   const { checkAuth } = useAuth();
@@ -19,9 +20,11 @@ const Signature = () => {
     try {
       const response = await signatureAPI.preview();
       setSignaturePreview(response.data.signature);
+      setSignerName(response.data.info?.signer_name || '');
     } catch (err) {
       // No signature found
       setSignaturePreview(null);
+      setSignerName('');
     } finally {
       setLoading(false);
     }
@@ -72,6 +75,11 @@ const Signature = () => {
               <div className="signature-display">
                 <img src={signaturePreview} alt="Your signature" />
               </div>
+              {signerName && (
+                <p className="signer-name-display">
+                  <strong>Signer Name:</strong> {signerName}
+                </p>
+              )}
               <p className="signature-info">
                 Background has been automatically removed for clean document signing.
               </p>
@@ -85,7 +93,10 @@ const Signature = () => {
             <div className="update-section">
               <h3>Update Signature</h3>
               <p>Upload a new signature image to replace the current one.</p>
-              <SignatureUpload onUploadSuccess={handleUploadSuccess} />
+              <SignatureUpload
+                onUploadSuccess={handleUploadSuccess}
+                currentSignerName={signerName}
+              />
             </div>
           </div>
         ) : (

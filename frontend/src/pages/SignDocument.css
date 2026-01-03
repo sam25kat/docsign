@@ -357,6 +357,83 @@
   padding: 0.5rem;
 }
 
+/* F2F Signature Box Preview */
+.signature-overlay.f2f-signature {
+  background: transparent;
+  border: 2px dashed rgba(251, 191, 36, 0.8);
+  padding: 0;
+  height: auto !important;
+}
+
+.signature-overlay.f2f-signature:hover {
+  border-color: rgba(251, 191, 36, 1);
+  background: transparent;
+  box-shadow: 0 4px 20px rgba(251, 191, 36, 0.2);
+}
+
+.f2f-signature-box {
+  background: #FFF8DC;
+  border: 1.5px solid #D4A574;
+  border-radius: 2px;
+  padding: 8px;
+  min-width: 220px;
+  position: relative;
+  font-family: Helvetica, Arial, sans-serif;
+  pointer-events: none;
+}
+
+.f2f-header {
+  font-size: 10px;
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 5px;
+}
+
+.f2f-sig-area {
+  margin-bottom: 8px;
+}
+
+.f2f-sig-area img {
+  max-width: 120px;
+  max-height: 40px;
+  object-fit: contain;
+  filter: none;
+}
+
+.f2f-info {
+  font-size: 7px;
+  line-height: 1.5;
+}
+
+.f2f-row {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.f2f-label {
+  color: #666;
+}
+
+.f2f-value-blue {
+  color: #0066CC;
+  font-weight: 500;
+}
+
+.f2f-qr-placeholder {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 50px;
+  height: 50px;
+  border: 1px solid #333;
+  background:
+    linear-gradient(#333 0 0) 0 0 / 14px 14px no-repeat,
+    linear-gradient(#333 0 0) 0 36px / 14px 14px no-repeat,
+    linear-gradient(#333 0 0) 36px 0 / 14px 14px no-repeat,
+    #fff;
+}
+
 /* React PDF overrides */
 .react-pdf__Page {
   background: white !important;

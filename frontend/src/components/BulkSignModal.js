@@ -68,16 +68,28 @@ const BulkSignModal = ({ documentIds, documents, autoMode, onClose, onComplete }
 
     const docsToSign = detectionResults
       .filter(r => r.selected && (r.detection.found || r.edited))
-      .map(r => ({
-        id: r.id,
-        position: {
-          x: r.detection.x,
-          y: r.detection.y,
-          page: r.detection.page,
-          width: r.detection.width,
-          height: r.detection.height,
-        },
-      }));
+      .map(r => {
+        // Support both new positions array format and old direct properties
+        let positions = [];
+        if (r.detection.positions && r.detection.positions.length > 0) {
+          positions = r.detection.positions;
+        } else if (r.detection.x !== undefined) {
+          // Old format - convert to positions array
+          positions = [{
+            x: r.detection.x,
+            y: r.detection.y,
+            page: r.detection.page,
+            width: r.detection.width,
+            height: r.detection.height,
+          }];
+        }
+        return {
+          id: r.id,
+          positions: positions,
+          // Keep single position for backward compat
+          position: positions[0] || null,
+        };
+      });
 
     if (docsToSign.length === 0) {
       setErrors([{ message: 'No documents selected for signing' }]);
@@ -147,6 +159,19 @@ const BulkSignModal = ({ documentIds, documents, autoMode, onClose, onComplete }
     return confidence || 'low';
   };
 
+  // Helper to get first position from detection (supports both old and new format)
+  const getFirstPosition = (detection) => {
+    if (!detection) return null;
+    if (detection.positions && detection.positions.length > 0) {
+      return detection.positions[0];
+    }
+    // Old format - detection has properties directly
+    if (detection.x !== undefined) {
+      return detection;
+    }
+    return null;
+  };
+
   const selectedCount = detectionResults.filter(r => r.selected).length;
   const detectedCount = detectionResults.filter(r => r.detection.found).length;
 
@@ -213,9 +238,15 @@ const BulkSignModal = ({ documentIds, documents, autoMode, onClose, onComplete }
                     >
                       <span className="doc-name">{result.filename}</span>
                       {result.detection.found || result.edited ? (
-                        <span className={`confidence-badge ${result.edited ? 'edited' : getConfidenceClass(result.detection.confidence)}`}>
-                          {result.edited ? 'manually edited' : `${result.detection.confidence} confidence`}
-                          {result.detection.keyword && !result.edited && ` • "${result.detection.keyword}"`}
+                        <span className={`confidence-badge ${result.edited ? 'edited' : getConfidenceClass(getFirstPosition(result.detection)?.confidence)}`}>
+                          {result.edited ? 'manually edited' : (() => {
+                            const pos = getFirstPosition(result.detection);
+                            const posCount = result.detection.positions?.length || 1;
+                            return posCount > 1
+                              ? `${posCount} signatures`
+                              : `${pos?.confidence || 'detected'} confidence`;
+                          })()}
+                          {getFirstPosition(result.detection)?.keyword && !result.edited && ` • "${getFirstPosition(result.detection).keyword}"`}
                         </span>
                       ) : (
                         <span className="no-detection-text">
@@ -319,6 +350,7 @@ const BulkSignModal = ({ documentIds, documents, autoMode, onClose, onComplete }
           detection={previewDoc.detection}
           onClose={() => setPreviewDoc(null)}
           onSave={(newPosition) => handleSavePosition(previewDoc.id, newPosition)}
+          isF2F={previewDoc.detection?.is_f2f || false}
         />
       )}
     </div>

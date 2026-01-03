@@ -18,8 +18,8 @@ from config import Config
 from models import db, User, Signature, Document
 from encryption import init_encryption, get_encryption, SignatureEncryption
 from signature_processor import process_signature_image, validate_image, get_signature_preview
-from pdf_signer import add_signature_to_pdf, get_pdf_info
-from signature_detector import detect_signature_position, detect_signature_positions_batch
+from pdf_signer import add_signature_to_pdf, add_f2f_signature_to_pdf, get_pdf_info
+from signature_detector import detect_signature_position, detect_signature_positions_batch, detect_all_signature_positions, detect_f2f_signature_position
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -146,6 +146,7 @@ def upload_signature():
     Upload signature image.
     - Removes background automatically
     - Encrypts and stores securely
+    - Optionally stores signer name for "Digitally signed by" text
     """
     if 'signature' not in request.files:
         return jsonify({'error': 'No signature file provided'}), 400
@@ -156,6 +157,11 @@ def upload_signature():
 
     if not allowed_file(file.filename, app.config['ALLOWED_IMAGE_EXTENSIONS']):
         return jsonify({'error': 'Invalid file type. Use PNG, JPG, or WEBP'}), 400
+
+    # Get signer name from form data (optional, defaults to user's name)
+    signer_name = request.form.get('signer_name', '').strip()
+    if not signer_name:
+        signer_name = current_user.name  # Default to user's name
 
     # Read file data
     image_data = file.read()
@@ -200,6 +206,7 @@ def upload_signature():
             existing_signature.encrypted_path = encrypted_path
             existing_signature.original_filename = secure_filename(file.filename)
             existing_signature.file_hash = file_hash
+            existing_signature.signer_name = signer_name
             existing_signature.updated_at = datetime.utcnow()
             signature = existing_signature
         else:
@@ -208,7 +215,8 @@ def upload_signature():
                 user_id=current_user.id,
                 encrypted_path=encrypted_path,
                 original_filename=secure_filename(file.filename),
-                file_hash=file_hash
+                file_hash=file_hash,
+                signer_name=signer_name
             )
             db.session.add(signature)
 
@@ -369,7 +377,13 @@ def get_document_file(doc_id):
 @app.route('/api/documents/<int:doc_id>/sign', methods=['POST'])
 @login_required
 def sign_document(doc_id):
-    """Sign a document using saved signature."""
+    """
+    Sign a document using saved signature.
+    Supports both single position and multiple positions (one per page).
+    F2F documents: only last page with text box.
+    """
+    from pdf_signer import add_multiple_signatures
+
     document = Document.query.get_or_404(doc_id)
 
     if document.status == 'signed':
@@ -380,11 +394,12 @@ def sign_document(doc_id):
     if not signature:
         return jsonify({'error': 'No signature found. Please upload your signature first.'}), 400
 
-    # Get position from request
+    # Get position(s) from request
     data = request.json
-    position = data.get('position')
+    position = data.get('position')      # Single position (backward compat)
+    positions = data.get('positions')    # Multiple positions array
 
-    if not position:
+    if not position and not positions:
         return jsonify({'error': 'Signature position required'}), 400
 
     try:
@@ -397,30 +412,72 @@ def sign_document(doc_id):
         if hashlib.sha256(signature_data).hexdigest() != signature.file_hash:
             return jsonify({'error': 'Signature integrity check failed'}), 500
 
-        # Generate signed PDF filename
-        signed_filename = f"signed_{document.filename}"
+        # Generate unique signed PDF filename
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        unique_id = uuid.uuid4().hex[:8]
+        signed_filename = f"signed_{timestamp}_{unique_id}_{document.filename}"
         signed_path = os.path.join(app.config['SIGNED_FOLDER'], signed_filename)
 
-        # Add signature to PDF
-        add_signature_to_pdf(
-            pdf_path=document.original_path,
-            signature_data=signature_data,
-            position=position,
-            output_path=signed_path
-        )
+        # Get signer name (fallback to user's name if not set)
+        signer_name = signature.signer_name or current_user.name
+
+        # F2F documents: use special signing with text box, last page only
+        if document.document_type == 'f2f':
+            # Use only the first position (should be last page from detection)
+            pos = positions[0] if positions else position
+            # Generate a unique document ID for the signature box
+            import uuid
+            doc_uuid = str(uuid.uuid4())
+            # Get client IP address
+            client_ip = request.remote_addr or request.headers.get('X-Forwarded-For', '::1')
+            add_f2f_signature_to_pdf(
+                pdf_path=document.original_path,
+                signature_data=signature_data,
+                position=pos,
+                output_path=signed_path,
+                signer_name=signer_name,
+                document_id=doc_uuid,
+                ip_address=client_ip
+            )
+            num_signatures = 1
+        elif positions and len(positions) > 0:
+            # Multiple positions - use add_multiple_signatures
+            signatures_list = [
+                {'signature_data': signature_data, 'position': pos}
+                for pos in positions
+            ]
+            add_multiple_signatures(
+                pdf_path=document.original_path,
+                signatures=signatures_list,
+                output_path=signed_path,
+                signer_name=signer_name
+            )
+            num_signatures = len(positions)
+        else:
+            # Single position - use add_signature_to_pdf
+            add_signature_to_pdf(
+                pdf_path=document.original_path,
+                signature_data=signature_data,
+                position=position,
+                output_path=signed_path,
+                signer_name=signer_name
+            )
+            num_signatures = 1
 
         # Update document record
         document.signed_path = signed_path
         document.signed_by = current_user.id
         document.signed_at = datetime.utcnow()
-        document.signature_position = position
+        document.signature_position = positions if positions else position
         document.status = 'signed'
 
         db.session.commit()
 
         return jsonify({
-            'message': 'Document signed successfully',
-            'document': document.to_dict()
+            'message': f'Document signed successfully with {num_signatures} signature(s)',
+            'document': document.to_dict(),
+            'num_signatures': num_signatures,
+            'is_f2f': document.document_type == 'f2f'
         }), 200
 
     except Exception as e:
@@ -475,11 +532,22 @@ def delete_document(doc_id):
 @app.route('/api/documents/<int:doc_id>/detect-signature-position', methods=['GET'])
 @login_required
 def detect_document_signature_position(doc_id):
-    """Detect where signature should be placed in a document."""
+    """
+    Detect where signature should be placed in a document.
+    Returns all signature positions (at most one per page).
+    For F2F documents: only returns position on last page.
+    """
     document = Document.query.get_or_404(doc_id)
 
     try:
-        detection = detect_signature_position(document.original_path)
+        # F2F documents: signature only on last page in blank space
+        if document.document_type == 'f2f':
+            detection = detect_f2f_signature_position(document.original_path)
+            detection['is_f2f'] = True
+        else:
+            # Use the standard multi-page detection
+            detection = detect_all_signature_positions(document.original_path)
+            detection['is_f2f'] = False
         return jsonify(detection), 200
     except Exception as e:
         return jsonify({'error': f'Detection failed: {str(e)}'}), 500
@@ -488,7 +556,8 @@ def detect_document_signature_position(doc_id):
 @app.route('/api/documents/bulk-detect', methods=['POST'])
 @login_required
 def bulk_detect_signature_positions():
-    """Detect signature positions for multiple documents."""
+    """Detect signature positions for multiple documents (multi-page).
+    F2F documents only get signature on last page."""
     data = request.json
     document_ids = data.get('document_ids', [])
 
@@ -499,10 +568,18 @@ def bulk_detect_signature_positions():
     for doc_id in document_ids:
         document = Document.query.get(doc_id)
         if document and document.status == 'pending':
-            detection = detect_signature_position(document.original_path)
+            # F2F documents: signature only on last page
+            if document.document_type == 'f2f':
+                detection = detect_f2f_signature_position(document.original_path)
+                detection['is_f2f'] = True
+            else:
+                # Use multi-page detection
+                detection = detect_all_signature_positions(document.original_path)
+                detection['is_f2f'] = False
             detection['document_id'] = doc_id
             detection['filename'] = document.filename
             detection['patient_name'] = document.patient_name
+            detection['document_type'] = document.document_type
             results.append(detection)
 
     return jsonify({'detections': results}), 200
@@ -513,17 +590,20 @@ def bulk_detect_signature_positions():
 def bulk_sign_documents():
     """
     Sign multiple documents at once.
+    Supports multiple signature positions per document (one per page).
 
     Request body:
     {
         "documents": [
-            {"id": 1, "position": {x, y, page, width, height}},
-            {"id": 2, "position": {x, y, page, width, height}},
+            {"id": 1, "positions": [{x, y, page, width, height}, ...]},
+            {"id": 2, "positions": [{x, y, page, width, height}, ...]},
             ...
         ],
-        "auto_mode": false  // If true, auto-detect positions for docs without position
+        "auto_mode": false  // If true, auto-detect ALL positions for docs without positions
     }
     """
+    from pdf_signer import add_multiple_signatures
+
     data = request.json
     documents_to_sign = data.get('documents', [])
     auto_mode = data.get('auto_mode', False)
@@ -555,7 +635,8 @@ def bulk_sign_documents():
 
     for doc_info in documents_to_sign:
         doc_id = doc_info.get('id')
-        position = doc_info.get('position')
+        positions = doc_info.get('positions', [])  # Array of positions
+        position = doc_info.get('position')        # Single position (backward compat)
 
         document = Document.query.get(doc_id)
         if not document:
@@ -573,57 +654,95 @@ def bulk_sign_documents():
             })
             continue
 
-        # Auto-detect position if not provided and auto_mode is on
-        if not position and auto_mode:
-            detection = detect_signature_position(document.original_path)
-            if detection['found']:
-                position = {
-                    'x': detection['x'],
-                    'y': detection['y'],
-                    'page': detection['page'],
-                    'width': detection['width'],
-                    'height': detection['height']
-                }
+        # Check if F2F document
+        is_f2f = document.document_type == 'f2f'
+
+        # Auto-detect positions if not provided and auto_mode is on
+        if not positions and not position and auto_mode:
+            if is_f2f:
+                # F2F: use special detection (last page only)
+                detection = detect_f2f_signature_position(document.original_path)
+            else:
+                detection = detect_all_signature_positions(document.original_path)
+            if detection['found'] and detection['positions']:
+                positions = detection['positions']
             else:
                 results['failed'].append({
                     'id': doc_id,
                     'filename': document.filename,
-                    'error': 'Could not detect signature position'
+                    'error': 'Could not detect signature positions'
                 })
                 continue
 
-        if not position:
+        # Handle backward compatibility: single position
+        if position and not positions:
+            positions = [position]
+
+        if not positions:
             results['failed'].append({
                 'id': doc_id,
                 'filename': document.filename,
-                'error': 'No position provided'
+                'error': 'No positions provided'
             })
             continue
 
         try:
-            # Generate signed PDF filename
-            signed_filename = f"signed_{document.filename}"
+            # Generate unique signed PDF filename
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            unique_id = uuid.uuid4().hex[:8]
+            signed_filename = f"signed_{timestamp}_{unique_id}_{document.filename}"
             signed_path = os.path.join(app.config['SIGNED_FOLDER'], signed_filename)
 
-            # Add signature to PDF
-            add_signature_to_pdf(
-                pdf_path=document.original_path,
-                signature_data=signature_data,
-                position=position,
-                output_path=signed_path
-            )
+            # Get signer name (fallback to user's name if not set)
+            signer_name = signature.signer_name or current_user.name
+
+            # F2F documents: use special signing with text box, last page only
+            if is_f2f:
+                doc_uuid = uuid.uuid4().hex
+                client_ip = request.remote_addr or request.headers.get('X-Forwarded-For', '::1')
+                add_f2f_signature_to_pdf(
+                    pdf_path=document.original_path,
+                    signature_data=signature_data,
+                    position=positions[0],  # F2F only uses first position (last page)
+                    output_path=signed_path,
+                    signer_name=signer_name,
+                    document_id=doc_uuid,
+                    ip_address=client_ip
+                )
+            elif len(positions) > 1:
+                # Multiple positions - use add_multiple_signatures
+                signatures_list = [
+                    {'signature_data': signature_data, 'position': pos}
+                    for pos in positions
+                ]
+                add_multiple_signatures(
+                    pdf_path=document.original_path,
+                    signatures=signatures_list,
+                    output_path=signed_path,
+                    signer_name=signer_name
+                )
+            else:
+                # Single position
+                add_signature_to_pdf(
+                    pdf_path=document.original_path,
+                    signature_data=signature_data,
+                    position=positions[0],
+                    output_path=signed_path,
+                    signer_name=signer_name
+                )
 
             # Update document record
             document.signed_path = signed_path
             document.signed_by = current_user.id
             document.signed_at = datetime.utcnow()
-            document.signature_position = position
+            document.signature_position = positions
             document.status = 'signed'
 
             results['successful'].append({
                 'id': doc_id,
                 'filename': document.filename,
-                'position': position
+                'num_signatures': 1 if is_f2f else len(positions),
+                'is_f2f': is_f2f
             })
 
         except Exception as e:
@@ -640,8 +759,9 @@ def bulk_sign_documents():
         db.session.rollback()
         return jsonify({'error': f'Database error: {str(e)}'}), 500
 
+    total_sigs = sum(r.get('num_signatures', 1) for r in results['successful'])
     return jsonify({
-        'message': f'Signed {len(results["successful"])} of {len(documents_to_sign)} documents',
+        'message': f'Signed {len(results["successful"])} documents with {total_sigs} total signature(s)',
         'results': results
     }), 200
 

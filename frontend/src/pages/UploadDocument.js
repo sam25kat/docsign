@@ -198,6 +198,7 @@ const UploadDocument = () => {
                 <option value="medical_report">Medical Report</option>
                 <option value="discharge_summary">Discharge Summary</option>
                 <option value="referral">Referral Letter</option>
+                <option value="f2f">F2F (Face to Face)</option>
                 <option value="other">Other</option>
               </select>
             </div>

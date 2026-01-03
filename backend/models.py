@@ -49,6 +49,8 @@ class Signature(db.Model):
     original_filename = db.Column(db.String(255))
     # File hash for integrity verification
     file_hash = db.Column(db.String(64))
+    # Signer name for "Digitally signed by" text
+    signer_name = db.Column(db.String(100))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -57,6 +59,7 @@ class Signature(db.Model):
             'id': self.id,
             'user_id': self.user_id,
             'original_filename': self.original_filename,
+            'signer_name': self.signer_name,
             'created_at': self.created_at.isoformat(),
             'updated_at': self.updated_at.isoformat()
         }

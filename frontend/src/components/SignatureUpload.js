@@ -2,11 +2,12 @@ import React, { useState, useRef } from 'react';
 import { signatureAPI } from '../services/api';
 import './SignatureUpload.css';
 
-const SignatureUpload = ({ onUploadSuccess, currentSignature }) => {
+const SignatureUpload = ({ onUploadSuccess, currentSignature, currentSignerName }) => {
   const [preview, setPreview] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
   const [dragActive, setDragActive] = useState(false);
+  const [signerName, setSignerName] = useState(currentSignerName || '');
   const fileInputRef = useRef(null);
 
   const handleFile = (file) => {
@@ -62,6 +63,11 @@ const SignatureUpload = ({ onUploadSuccess, currentSignature }) => {
       return;
     }
 
+    if (!signerName.trim()) {
+      setError('Please enter the signer name');
+      return;
+    }
+
     setUploading(true);
     setError('');
 
@@ -72,6 +78,7 @@ const SignatureUpload = ({ onUploadSuccess, currentSignature }) => {
 
       const formData = new FormData();
       formData.append('signature', blob, 'signature.png');
+      formData.append('signer_name', signerName.trim());
 
       await signatureAPI.upload(formData);
       onUploadSuccess?.();
@@ -102,8 +109,22 @@ const SignatureUpload = ({ onUploadSuccess, currentSignature }) => {
         <div className="current-signature">
           <h4>Current Signature:</h4>
           <img src={currentSignature} alt="Current signature" />
+          {currentSignerName && (
+            <p className="current-signer-name">Signer: {currentSignerName}</p>
+          )}
         </div>
       )}
+
+      <div className="signer-name-input">
+        <label htmlFor="signerName">Signer Name (for "Digitally signed by" text):</label>
+        <input
+          type="text"
+          id="signerName"
+          value={signerName}
+          onChange={(e) => setSignerName(e.target.value)}
+          placeholder="Enter name to appear on signed documents"
+        />
+      </div>
 
       <div
         className={`drop-zone ${dragActive ? 'active' : ''} ${preview ? 'has-preview' : ''}`}

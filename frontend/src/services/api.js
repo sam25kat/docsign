@@ -36,7 +36,10 @@ export const documentAPI = {
   get: (id) => api.get(`/documents/${id}`),
   getFile: (id) => api.get(`/documents/${id}/file`, { responseType: 'blob' }),
   getFileUrl: (id) => `${API_URL}/documents/${id}/file`,
-  sign: (id, position) => api.post(`/documents/${id}/sign`, { position }),
+  sign: (id, position, positions) => api.post(`/documents/${id}/sign`, {
+    position,   // Single position (backward compat)
+    positions   // Multiple positions array
+  }),
   download: (id) => `${API_URL}/documents/${id}/download`,
   downloadBlob: (id) => api.get(`/documents/${id}/download`, { responseType: 'blob' }),
   delete: (id) => api.delete(`/documents/${id}/delete`),

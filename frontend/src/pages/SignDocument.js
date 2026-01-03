@@ -23,9 +23,11 @@ const SignDocument = () => {
   const [error, setError] = useState('');
   const [detecting, setDetecting] = useState(false);
   const [detectionInfo, setDetectionInfo] = useState(null);
+  const [isF2F, setIsF2F] = useState(false);
+  const [signerName, setSignerName] = useState('');
 
-  // Signature position state
-  const [signaturePosition, setSignaturePosition] = useState(null);
+  // Signature positions state - supports multiple positions (one per page max)
+  const [signaturePositions, setSignaturePositions] = useState([]); // All positions
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
 
@@ -36,6 +38,11 @@ const SignDocument = () => {
     try {
       const response = await documentAPI.get(id);
       setDocument(response.data.document);
+
+      // Check if F2F document
+      if (response.data.document?.document_type === 'f2f') {
+        setIsF2F(true);
+      }
 
       // Fetch PDF as blob with credentials
       const fileResponse = await documentAPI.getFile(id);
@@ -61,6 +68,7 @@ const SignDocument = () => {
     try {
       const response = await signatureAPI.preview();
       setSignaturePreview(response.data.signature);
+      setSignerName(response.data.info?.signer_name || '');
     } catch (err) {
       setError('No signature found. Please upload your signature first.');
     }
@@ -76,11 +84,17 @@ const SignDocument = () => {
     setNumPages(totalPages);
   };
 
-  // Place signature on click
+  // Get current page's signature position
+  const currentPagePosition = signaturePositions.find(p => p.page === currentPage - 1);
+
+  // Place signature on click (one per page max)
   const handlePageClick = (e) => {
-    // Don't place new signature if one exists or if clicking on signature overlay
-    if (!signaturePreview || signaturePosition) return;
+    // Don't place if no signature loaded
+    if (!signaturePreview) return;
+    // Don't place if clicking on signature overlay
     if (e.target.closest('.signature-overlay')) return;
+    // Don't place if current page already has a signature
+    if (currentPagePosition) return;
 
     const container = pageContainerRef.current;
     if (!container) return;
@@ -89,18 +103,20 @@ const SignDocument = () => {
     const x = (e.clientX - rect.left) / scale;
     const y = (e.clientY - rect.top) / scale;
 
-    setSignaturePosition({
+    const newPosition = {
       x: Math.max(0, x - 75), // Center signature on click
       y: Math.max(0, y - 25),
       page: currentPage - 1,
       width: 150,
       height: 50,
-    });
+    };
+
+    setSignaturePositions(prev => [...prev, newPosition]);
   };
 
   // Drag handlers
   const handleDragStart = (e) => {
-    if (!signaturePosition) return;
+    if (!currentPagePosition) return;
 
     e.preventDefault();
     e.stopPropagation();
@@ -113,7 +129,7 @@ const SignDocument = () => {
   };
 
   const handleDragMove = useCallback((e) => {
-    if (!isDragging || !pageContainerRef.current) return;
+    if (!isDragging || !pageContainerRef.current || !currentPagePosition) return;
 
     const container = pageContainerRef.current;
     const rect = container.getBoundingClientRect();
@@ -122,15 +138,16 @@ const SignDocument = () => {
     const newY = (e.clientY - rect.top - dragOffset.y) / scale;
 
     // Keep within bounds
-    const maxX = (rect.width / scale) - signaturePosition.width;
-    const maxY = (rect.height / scale) - signaturePosition.height;
+    const maxX = (rect.width / scale) - currentPagePosition.width;
+    const maxY = (rect.height / scale) - currentPagePosition.height;
 
-    setSignaturePosition(prev => ({
-      ...prev,
-      x: Math.max(0, Math.min(newX, maxX)),
-      y: Math.max(0, Math.min(newY, maxY)),
-    }));
-  }, [isDragging, dragOffset, scale, signaturePosition?.width, signaturePosition?.height]);
+    // Update position in the array
+    setSignaturePositions(prev => prev.map(p =>
+      p.page === currentPage - 1
+        ? { ...p, x: Math.max(0, Math.min(newX, maxX)), y: Math.max(0, Math.min(newY, maxY)) }
+        : p
+    ));
+  }, [isDragging, dragOffset, scale, currentPagePosition, currentPage]);
 
   const handleDragEnd = () => {
     setIsDragging(false);
@@ -148,23 +165,29 @@ const SignDocument = () => {
     };
   }, [isDragging, handleDragMove]);
 
-  // Resize signature
+  // Resize signature on current page
   const handleResize = (newWidth) => {
-    const aspectRatio = signaturePosition.height / signaturePosition.width;
-    setSignaturePosition(prev => ({
-      ...prev,
-      width: newWidth,
-      height: newWidth * aspectRatio,
-    }));
+    if (!currentPagePosition) return;
+    const aspectRatio = currentPagePosition.height / currentPagePosition.width;
+    setSignaturePositions(prev => prev.map(p =>
+      p.page === currentPage - 1
+        ? { ...p, width: newWidth, height: newWidth * aspectRatio }
+        : p
+    ));
   };
 
-  // Clear signature position
+  // Clear signature position on current page
   const handleClearPosition = () => {
-    setSignaturePosition(null);
+    setSignaturePositions(prev => prev.filter(p => p.page !== currentPage - 1));
+  };
+
+  // Clear ALL signature positions
+  const handleClearAllPositions = () => {
+    setSignaturePositions([]);
     setDetectionInfo(null);
   };
 
-  // Auto-detect signature position
+  // Auto-detect signature positions (multi-page)
   const handleAutoDetect = async () => {
     setDetecting(true);
     setDetectionInfo(null);
@@ -173,26 +196,27 @@ const SignDocument = () => {
       const response = await documentAPI.detectSignaturePosition(id);
       const detection = response.data;
 
-      if (detection.found) {
-        // Navigate to the detected page
-        setCurrentPage(detection.page + 1);
+      if (detection.found && detection.positions && detection.positions.length > 0) {
+        // Set all detected positions
+        setSignaturePositions(detection.positions);
 
-        // Set signature position
-        setSignaturePosition({
-          x: detection.x,
-          y: detection.y,
-          page: detection.page,
-          width: detection.width,
-          height: detection.height,
-        });
+        // Navigate to the first detected page
+        const firstPos = detection.positions[0];
+        setCurrentPage(firstPos.page + 1);
 
         setDetectionInfo({
-          confidence: detection.confidence,
-          method: detection.method,
-          keyword: detection.keyword,
+          confidence: firstPos.confidence,
+          method: firstPos.method,
+          keyword: firstPos.keyword,
+          total: detection.positions.length,
+          totalPages: detection.total_pages,
         });
+
+        if (detection.positions.length > 1) {
+          alert(`Found ${detection.positions.length} signature locations across the document.`);
+        }
       } else {
-        alert('Could not detect signature position. Please place manually.');
+        alert('Could not detect signature positions. Please place manually.');
       }
     } catch (err) {
       console.error('Detection failed:', err);
@@ -202,17 +226,20 @@ const SignDocument = () => {
     }
   };
 
-  // Sign document
+  // Sign document (with all positions)
   const handleSign = async () => {
-    if (!signaturePosition) {
+    if (signaturePositions.length === 0) {
       alert('Please place your signature on the document first.');
       return;
     }
 
     setSigning(true);
     try {
-      await documentAPI.sign(id, signaturePosition);
-      alert('Document signed successfully!');
+      await documentAPI.sign(id, null, signaturePositions);
+      const msg = signaturePositions.length > 1
+        ? `Document signed successfully with ${signaturePositions.length} signatures!`
+        : 'Document signed successfully!';
+      alert(msg);
       navigate('/documents');
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to sign document');
@@ -221,26 +248,16 @@ const SignDocument = () => {
     }
   };
 
-  // Navigation
+  // Navigation (don't clear positions - we support multi-page)
   const goToPrevPage = () => {
     if (currentPage > 1) {
-      const newPage = currentPage - 1;
-      setCurrentPage(newPage);
-      // Clear signature if it's on a different page
-      if (signaturePosition && signaturePosition.page !== newPage - 1) {
-        setSignaturePosition(null);
-      }
+      setCurrentPage(currentPage - 1);
     }
   };
 
   const goToNextPage = () => {
     if (numPages && currentPage < numPages) {
-      const newPage = currentPage + 1;
-      setCurrentPage(newPage);
-      // Clear signature if it's on a different page
-      if (signaturePosition && signaturePosition.page !== newPage - 1) {
-        setSignaturePosition(null);
-      }
+      setCurrentPage(currentPage + 1);
     }
   };
 
@@ -268,12 +285,15 @@ const SignDocument = () => {
           <h1>{document?.filename}</h1>
         </div>
         <div className="header-right">
+          {signaturePositions.length > 0 && (
+            <span className="sig-count">{signaturePositions.length} signature(s)</span>
+          )}
           <button
             className="btn-sign-document"
             onClick={handleSign}
-            disabled={!signaturePosition || signing}
+            disabled={signaturePositions.length === 0 || signing}
           >
-            {signing ? 'Signing...' : 'Sign & Save'}
+            {signing ? 'Signing...' : `Sign & Save${signaturePositions.length > 1 ? ` (${signaturePositions.length})` : ''}`}
           </button>
         </div>
       </div>
@@ -292,14 +312,14 @@ const SignDocument = () => {
             <button onClick={() => setScale(s => Math.min(2, s + 0.1))}>+</button>
           </div>
 
-          {signaturePosition && (
+          {currentPagePosition && (
             <div className="toolbar-group">
               <label>Size:</label>
               <input
                 type="range"
                 min="80"
                 max="300"
-                value={signaturePosition.width}
+                value={currentPagePosition.width}
                 onChange={(e) => handleResize(Number(e.target.value))}
               />
               <button className="btn-clear" onClick={handleClearPosition}>
@@ -307,11 +327,18 @@ const SignDocument = () => {
               </button>
             </div>
           )}
+          {signaturePositions.length > 1 && (
+            <div className="toolbar-group">
+              <button className="btn-clear-all" onClick={handleClearAllPositions}>
+                Clear All ({signaturePositions.length})
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="pdf-viewer-area">
           <div className="instructions">
-            {!signaturePosition ? (
+            {signaturePositions.length === 0 ? (
               <div className="instructions-content">
                 <p>Click anywhere on the document to place your signature, or use auto-detect</p>
                 <button
@@ -319,16 +346,22 @@ const SignDocument = () => {
                   onClick={handleAutoDetect}
                   disabled={detecting || !signaturePreview}
                 >
-                  {detecting ? 'Detecting...' : 'Auto-Detect Position'}
+                  {detecting ? 'Detecting...' : 'Auto-Detect Positions'}
                 </button>
               </div>
             ) : (
               <div className="instructions-content">
-                <p>Drag to move • Use slider to resize • Click "Sign & Save" when ready</p>
+                <p>
+                  {currentPagePosition
+                    ? 'Drag to move • Use slider to resize'
+                    : 'Click to place signature on this page'}
+                  {' • '}{signaturePositions.length} of {numPages} pages have signatures
+                </p>
                 {detectionInfo && (
                   <span className={`detection-badge ${detectionInfo.confidence}`}>
-                    {detectionInfo.confidence} confidence
-                    {detectionInfo.keyword && ` • Found: "${detectionInfo.keyword}"`}
+                    {detectionInfo.total > 1
+                      ? `${detectionInfo.total} locations detected`
+                      : `${detectionInfo.confidence} confidence`}
                   </span>
                 )}
               </div>
@@ -336,7 +369,7 @@ const SignDocument = () => {
           </div>
 
           <div
-            className={`pdf-page-container ${!signaturePosition ? 'placing-mode' : ''}`}
+            className={`pdf-page-container ${!currentPagePosition ? 'placing-mode' : ''}`}
             ref={pageContainerRef}
             onClick={handlePageClick}
           >
@@ -344,19 +377,37 @@ const SignDocument = () => {
               <Page pageNumber={currentPage} scale={scale} />
             </Document>
 
-            {signaturePosition && signaturePosition.page === currentPage - 1 && (
+            {currentPagePosition && (
               <div
                 ref={signatureRef}
-                className={`signature-overlay ${isDragging ? 'dragging' : ''}`}
+                className={`signature-overlay ${isDragging ? 'dragging' : ''} ${isF2F ? 'f2f-signature' : ''}`}
                 style={{
-                  left: signaturePosition.x * scale,
-                  top: signaturePosition.y * scale,
-                  width: signaturePosition.width * scale,
-                  height: signaturePosition.height * scale,
+                  left: currentPagePosition.x * scale,
+                  top: currentPagePosition.y * scale,
+                  width: isF2F ? 280 * scale : currentPagePosition.width * scale,
+                  height: isF2F ? 'auto' : currentPagePosition.height * scale,
                 }}
                 onMouseDown={handleDragStart}
               >
-                <img src={signaturePreview} alt="Your signature" draggable={false} />
+                {isF2F ? (
+                  /* F2F Electronic Signature Box Preview */
+                  <div className="f2f-signature-box" style={{ transform: `scale(${scale})`, transformOrigin: 'top left' }}>
+                    <div className="f2f-header">Electronic Signature</div>
+                    <div className="f2f-sig-area">
+                      <img src={signaturePreview} alt="Your signature" draggable={false} />
+                    </div>
+                    <div className="f2f-info">
+                      <div className="f2f-row"><span className="f2f-label">Document ID:</span></div>
+                      <div className="f2f-row"><span className="f2f-value-blue">xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx</span></div>
+                      <div className="f2f-row"><span className="f2f-label">IP Address: ::1</span></div>
+                      <div className="f2f-row"><span className="f2f-label">Time: {new Date().toLocaleString('en-US', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span></div>
+                      <div className="f2f-row"><span className="f2f-label">Signer: </span><span className="f2f-value-blue">{signerName || 'Unknown'}</span></div>
+                    </div>
+                    <div className="f2f-qr-placeholder"></div>
+                  </div>
+                ) : (
+                  <img src={signaturePreview} alt="Your signature" draggable={false} />
+                )}
                 <div className="drag-hint">Drag to move</div>
               </div>
             )}

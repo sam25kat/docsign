@@ -12,18 +12,20 @@ const DocumentPreviewModal = ({
   filename,
   detection,
   onClose,
-  onSave
+  onSave,
+  isF2F = false
 }) => {
   const [pdfUrl, setPdfUrl] = useState(null);
   const [numPages, setNumPages] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [scale, setScale] = useState(1.0);
   const [signaturePreview, setSignaturePreview] = useState(null);
+  const [signerName, setSignerName] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  // Signature position state - initialize from detection
-  const [signaturePosition, setSignaturePosition] = useState(null);
+  // Signature positions state - supports multiple (one per page max)
+  const [signaturePositions, setSignaturePositions] = useState([]);
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
 
@@ -39,20 +41,35 @@ const DocumentPreviewModal = ({
         const blobUrl = URL.createObjectURL(fileResponse.data);
         setPdfUrl(blobUrl);
 
-        // Fetch signature
+        // Fetch signature and signer name
         const sigResponse = await signatureAPI.preview();
         setSignaturePreview(sigResponse.data.signature);
+        setSignerName(sigResponse.data.info?.signer_name || '');
 
-        // Initialize position from detection
+        // Initialize positions from detection (supports both old and new format)
         if (detection && detection.found) {
-          setSignaturePosition({
-            x: detection.x,
-            y: detection.y,
-            page: detection.page,
-            width: detection.width || 120,
-            height: detection.height || 40,
-          });
-          setCurrentPage(detection.page + 1);
+          if (detection.positions && detection.positions.length > 0) {
+            // New format: positions array
+            setSignaturePositions(detection.positions.map(pos => ({
+              x: pos.x,
+              y: pos.y,
+              page: pos.page,
+              width: pos.width || 120,
+              height: pos.height || 40,
+            })));
+            // Navigate to first detected page
+            setCurrentPage(detection.positions[0].page + 1);
+          } else {
+            // Old format: direct properties (backward compat)
+            setSignaturePositions([{
+              x: detection.x,
+              y: detection.y,
+              page: detection.page,
+              width: detection.width || 120,
+              height: detection.height || 40,
+            }]);
+            setCurrentPage(detection.page + 1);
+          }
         }
       } catch (err) {
         setError('Failed to load document');
@@ -76,10 +93,15 @@ const DocumentPreviewModal = ({
     setNumPages(totalPages);
   };
 
-  // Place signature on click
+  // Get current page's signature position
+  const currentPagePosition = signaturePositions.find(p => p.page === currentPage - 1);
+
+  // Place signature on click (one per page max)
   const handlePageClick = (e) => {
-    if (!signaturePreview || signaturePosition) return;
+    if (!signaturePreview) return;
     if (e.target.closest('.signature-overlay')) return;
+    // Don't place if current page already has a signature
+    if (currentPagePosition) return;
 
     const container = pageContainerRef.current;
     if (!container) return;
@@ -88,18 +110,20 @@ const DocumentPreviewModal = ({
     const x = (e.clientX - rect.left) / scale;
     const y = (e.clientY - rect.top) / scale;
 
-    setSignaturePosition({
+    const newPosition = {
       x: Math.max(0, x - 60),
       y: Math.max(0, y - 20),
       page: currentPage - 1,
       width: 120,
       height: 40,
-    });
+    };
+
+    setSignaturePositions(prev => [...prev, newPosition]);
   };
 
   // Drag handlers
   const handleDragStart = (e) => {
-    if (!signaturePosition) return;
+    if (!currentPagePosition) return;
 
     e.preventDefault();
     e.stopPropagation();
@@ -112,7 +136,7 @@ const DocumentPreviewModal = ({
   };
 
   const handleDragMove = useCallback((e) => {
-    if (!isDragging || !pageContainerRef.current) return;
+    if (!isDragging || !pageContainerRef.current || !currentPagePosition) return;
 
     const container = pageContainerRef.current;
     const rect = container.getBoundingClientRect();
@@ -120,15 +144,15 @@ const DocumentPreviewModal = ({
     const newX = (e.clientX - rect.left - dragOffset.x) / scale;
     const newY = (e.clientY - rect.top - dragOffset.y) / scale;
 
-    const maxX = (rect.width / scale) - signaturePosition.width;
-    const maxY = (rect.height / scale) - signaturePosition.height;
+    const maxX = (rect.width / scale) - currentPagePosition.width;
+    const maxY = (rect.height / scale) - currentPagePosition.height;
 
-    setSignaturePosition(prev => ({
-      ...prev,
-      x: Math.max(0, Math.min(newX, maxX)),
-      y: Math.max(0, Math.min(newY, maxY)),
-    }));
-  }, [isDragging, dragOffset, scale, signaturePosition?.width, signaturePosition?.height]);
+    setSignaturePositions(prev => prev.map(p =>
+      p.page === currentPage - 1
+        ? { ...p, x: Math.max(0, Math.min(newX, maxX)), y: Math.max(0, Math.min(newY, maxY)) }
+        : p
+    ));
+  }, [isDragging, dragOffset, scale, currentPagePosition, currentPage]);
 
   const handleDragEnd = () => {
     setIsDragging(false);
@@ -146,27 +170,31 @@ const DocumentPreviewModal = ({
     };
   }, [isDragging, handleDragMove]);
 
-  // Resize signature
+  // Resize signature on current page
   const handleResize = (newWidth) => {
-    const aspectRatio = signaturePosition.height / signaturePosition.width;
-    setSignaturePosition(prev => ({
-      ...prev,
-      width: newWidth,
-      height: newWidth * aspectRatio,
-    }));
+    if (!currentPagePosition) return;
+    const aspectRatio = currentPagePosition.height / currentPagePosition.width;
+    setSignaturePositions(prev => prev.map(p =>
+      p.page === currentPage - 1
+        ? { ...p, width: newWidth, height: newWidth * aspectRatio }
+        : p
+    ));
   };
 
-  // Clear signature position
+  // Clear signature position on current page
   const handleClearPosition = () => {
-    setSignaturePosition(null);
+    setSignaturePositions(prev => prev.filter(p => p.page !== currentPage - 1));
   };
 
   // Save and close
   const handleSave = () => {
-    if (signaturePosition) {
+    if (signaturePositions.length > 0) {
+      // Return positions in a format compatible with both old and new handling
       onSave({
-        ...signaturePosition,
         found: true,
+        positions: signaturePositions,
+        // Also include first position's data for backward compatibility
+        ...(signaturePositions[0] || {}),
       });
     }
     onClose();
@@ -221,14 +249,14 @@ const DocumentPreviewModal = ({
                   <button onClick={() => setScale(s => Math.min(2, s + 0.1))}>+</button>
                 </div>
 
-                {signaturePosition && (
+                {currentPagePosition && (
                   <div className="toolbar-group">
                     <label>Size:</label>
                     <input
                       type="range"
                       min="60"
                       max="250"
-                      value={signaturePosition.width}
+                      value={currentPagePosition.width}
                       onChange={(e) => handleResize(Number(e.target.value))}
                     />
                     <button className="btn-clear" onClick={handleClearPosition}>
@@ -239,16 +267,21 @@ const DocumentPreviewModal = ({
               </div>
 
               <div className="preview-instructions">
-                {!signaturePosition ? (
+                {signaturePositions.length === 0 ? (
                   <p>Click anywhere on the document to place your signature</p>
                 ) : (
-                  <p>Drag to move • Use slider to resize • Click "Save Position" when done</p>
+                  <p>
+                    {currentPagePosition
+                      ? 'Drag to move • Use slider to resize'
+                      : 'Click to place signature on this page'}
+                    {' • '}{signaturePositions.length} page(s) have signatures
+                  </p>
                 )}
               </div>
 
               <div className="preview-pdf-area">
                 <div
-                  className={`preview-page-container ${!signaturePosition ? 'placing-mode' : ''}`}
+                  className={`preview-page-container ${!currentPagePosition ? 'placing-mode' : ''}`}
                   ref={pageContainerRef}
                   onClick={handlePageClick}
                 >
@@ -256,19 +289,70 @@ const DocumentPreviewModal = ({
                     <Page pageNumber={currentPage} scale={scale} />
                   </Document>
 
-                  {signaturePosition && signaturePosition.page === currentPage - 1 && (
+                  {currentPagePosition && (
                     <div
                       ref={signatureRef}
-                      className={`signature-overlay ${isDragging ? 'dragging' : ''}`}
+                      className={`signature-overlay ${isDragging ? 'dragging' : ''} ${isF2F ? 'f2f-signature' : ''}`}
                       style={{
-                        left: signaturePosition.x * scale,
-                        top: signaturePosition.y * scale,
-                        width: signaturePosition.width * scale,
-                        height: signaturePosition.height * scale,
+                        left: currentPagePosition.x * scale,
+                        top: currentPagePosition.y * scale,
+                        width: isF2F ? 280 * scale : currentPagePosition.width * scale,
                       }}
                       onMouseDown={handleDragStart}
                     >
-                      <img src={signaturePreview} alt="Your signature" draggable={false} />
+                      {isF2F ? (
+                        /* F2F Electronic Signature Box Preview */
+                        <div className="f2f-signature-box" style={{ transform: `scale(${scale})`, transformOrigin: 'top left' }}>
+                          <div className="f2f-header">Electronic Signature</div>
+                          <div className="f2f-sig-area">
+                            <img
+                              src={signaturePreview}
+                              alt="Your signature"
+                              draggable={false}
+                            />
+                          </div>
+                          <div className="f2f-info">
+                            <div className="f2f-row">
+                              <span className="f2f-label">Document ID:</span>
+                            </div>
+                            <div className="f2f-row">
+                              <span className="f2f-value-blue">xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx</span>
+                            </div>
+                            <div className="f2f-row">
+                              <span className="f2f-label">IP Address: ::1</span>
+                            </div>
+                            <div className="f2f-row">
+                              <span className="f2f-label">Time: {new Date().toLocaleString('en-US', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
+                            </div>
+                            <div className="f2f-row">
+                              <span className="f2f-label">Signer: </span>
+                              <span className="f2f-value-blue">{signerName || 'Unknown'}</span>
+                            </div>
+                          </div>
+                          <div className="f2f-qr-placeholder"></div>
+                        </div>
+                      ) : (
+                        /* Regular Signature Preview */
+                        <>
+                          <img
+                            src={signaturePreview}
+                            alt="Your signature"
+                            draggable={false}
+                            style={{
+                              width: '100%',
+                              height: currentPagePosition.height * scale,
+                              objectFit: 'contain'
+                            }}
+                          />
+                          {signerName && (
+                            <div className="signature-text-preview" style={{ fontSize: `${7 * scale}px` }}>
+                              <span>Digitally signed by</span>
+                              <strong>{signerName}</strong>
+                              <span>Date: {new Date().toLocaleString()}</span>
+                            </div>
+                          )}
+                        </>
+                      )}
                       <div className="drag-hint">Drag to move</div>
                     </div>
                   )}
@@ -285,9 +369,9 @@ const DocumentPreviewModal = ({
           <button
             className="btn-primary"
             onClick={handleSave}
-            disabled={!signaturePosition}
+            disabled={signaturePositions.length === 0}
           >
-            Save Position
+            Save Position{signaturePositions.length > 1 ? 's' : ''}
           </button>
         </div>
       </div>

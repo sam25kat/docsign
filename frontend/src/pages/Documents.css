@@ -121,11 +121,12 @@
   border-radius: var(--border-radius);
   border: 1px solid var(--glass-border);
   backdrop-filter: var(--blur);
-  overflow: hidden;
+  overflow-x: auto;
 }
 
 .documents-table table {
   width: 100%;
+  min-width: 900px;
   border-collapse: collapse;
 }
 
@@ -178,6 +179,12 @@
   border-radius: 20px;
   font-size: 0.8rem;
   font-weight: 500;
+}
+
+.doc-type.type-f2f {
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.15), rgba(245, 158, 11, 0.15));
+  border-color: rgba(251, 191, 36, 0.4);
+  color: #fbbf24;
 }
 
 .actions {

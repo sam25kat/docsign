@@ -14,7 +14,23 @@
       "Bash(\"venv\\\\Scripts\\\\python.exe\" -c \"from app import app; print\\(''App imports OK''\\)\")",
       "Bash(npm run build:*)",
       "Bash(dir \"c:\\\\Users\\\\JARVIS\\\\Desktop\\\\Document Signer\\\\signed_documents\")",
-      "Bash(\"venv\\\\Scripts\\\\python.exe\" -c \"import base64, os; print\\(base64.b64encode\\(os.urandom\\(32\\)\\).decode\\(\\)\\)\")"
+      "Bash(\"venv\\\\Scripts\\\\python.exe\" -c \"import base64, os; print\\(base64.b64encode\\(os.urandom\\(32\\)\\).decode\\(\\)\\)\")",
+      "Bash(\"venv\\\\Scripts\\\\python.exe\" -c \"from signature_detector import detect_all_signature_positions; print\\(''Signature detector OK''\\)\")",
+      "Bash(\"venv\\\\Scripts\\\\python.exe\" -c \"from signature_detector import detect_all_signature_positions, detect_signature_position; print\\(''pdfplumber-only detector OK''\\)\")",
+      "Bash(\"venv\\\\Scripts\\\\python.exe\" -c \"from app import app; print\\(''App OK''\\)\")",
+      "Bash(\"venv\\\\Scripts\\\\python.exe\" -c \"\nfrom app import app, db\nfrom models import Document\n\nwith app.app_context\\(\\):\n    docs = Document.query.all\\(\\)\n    print\\(f''Total documents in DB: {len\\(docs\\)}''\\)\n    for d in docs:\n        print\\(f''  ID={d.id}, file={d.filename}, status={d.status}, path exists={__import__\\(\"\"os\"\"\\).path.exists\\(d.original_path\\) if d.original_path else False}''\\)\n\")",
+      "Bash(\"venv\\\\Scripts\\\\python.exe\":*)",
+      "Bash(\"c:\\\\Users\\\\JARVIS\\\\Desktop\\\\Document Signer\\\\venv\\\\Scripts\\\\python.exe\" -c \"from signature_detector import detect_all_signature_positions; print\\(''Signature detector OK''\\)\")",
+      "Bash(\"..\\\\venv\\\\Scripts\\\\python.exe\" -c \"from signature_detector import detect_all_signature_positions; print\\(''Signature detector OK''\\)\")",
+      "Bash(cd:*)",
+      "Bash(../venv/Scripts/python.exe -c \"from signature_detector import detect_all_signature_positions; print\\(''Signature detector OK''\\)\")",
+      "Bash(\"c:\\\\Users\\\\JARVIS\\\\Desktop\\\\Document Signer\\\\venv\\\\Scripts\\\\python.exe\" \"c:\\\\Users\\\\JARVIS\\\\Desktop\\\\Document Signer\\\\backend\\\\migrate_add_signer_name.py\")",
+      "Bash(\"..\\\\venv\\\\Scripts\\\\python.exe\" migrate_add_signer_name.py)",
+      "Bash(python:*)",
+      "Bash(dir /s /b \"c:\\\\Users\\\\JARVIS\\\\Desktop\\\\Document Signer\\\\*.db\")",
+      "Bash(\"c:\\\\Users\\\\JARVIS\\\\Desktop\\\\Document Signer\\\\venv\\\\Scripts\\\\python.exe\" -c \"from pdf_signer import add_signature_to_pdf, add_f2f_signature_to_pdf; from signature_detector import detect_f2f_signature_position; print\\(''All imports OK''\\)\")",
+      "Bash(/c/Users/JARVIS/Desktop/\"Document Signer\"/venv/Scripts/python.exe:*)",
+      "Bash(npx eslint:*)"
     ]
   }
 }

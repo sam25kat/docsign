@@ -121,6 +121,20 @@ const Documents = () => {
     });
   };
 
+  const formatDocType = (type) => {
+    if (!type) return 'General';
+    const typeMap = {
+      'consent_form': 'Consent Form',
+      'prescription': 'Prescription',
+      'medical_report': 'Medical Report',
+      'discharge_summary': 'Discharge Summary',
+      'referral': 'Referral Letter',
+      'f2f': 'F2F',
+      'other': 'Other'
+    };
+    return typeMap[type] || type;
+  };
+
   const pendingDocs = documents.filter(d => d.status === 'pending');
 
   return (
@@ -238,7 +252,9 @@ const Documents = () => {
                     {doc.filename}
                   </td>
                   <td>
-                    <span className="doc-type">{doc.document_type || 'General'}</span>
+                    <span className={`doc-type ${doc.document_type === 'f2f' ? 'type-f2f' : ''}`}>
+                      {formatDocType(doc.document_type)}
+                    </span>
                   </td>
                   <td>{doc.patient_name || '-'}</td>
                   <td>{formatDate(doc.uploaded_at)}</td>
